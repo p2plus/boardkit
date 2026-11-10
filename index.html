@@ -175,7 +175,7 @@
 <script>
 /*CORE-START*/
 "use strict";
-const VERSION = "0.2.0";
+const VERSION = "0.2.1";
 
 // ---- Timer: a small pure state machine -------------------------------
 // Shape: {durationMs, phase: 'idle'|'running'|'paused'|'done',
@@ -277,8 +277,23 @@ function drawFrom(state, rng) {
   let s = state;
   if (s.pool.length === 0) {
     if (s.names.length === 0) return { name: null, state: s };
-    s = { ...s, pool: shuffled(s.names, rng), round: s.round + 1,
-          drawn: [...s.drawn, "— Runde " + (s.round + 1) + " —"] };
+    const lastReal = [...s.drawn].reverse()
+      .find(n => !n.startsWith("—")) || null;
+    const fresh = shuffled(s.names, rng);
+    // New round's first draw: never an immediate repeat of the name that
+    // closed the previous round — boundary adjacency reads as "rigged".
+    // Trade: lastReal has zero chance on this single draw, the others
+    // 1/(n-1) instead of 1/n. Imperceptible, and worth the calm.
+    const pickFrom = lastReal && fresh.length > 1
+      ? fresh.filter(n => n !== lastReal) : fresh;
+    const name = pickFrom[randomInt(pickFrom.length, rng)];
+    return {
+      name,
+      state: { names: s.names,
+               pool: fresh.filter(n => n !== name),
+               drawn: [...s.drawn, "— Runde " + (s.round + 1) + " —", name],
+               round: s.round + 1 },
+    };
   }
   const i = randomInt(s.pool.length, rng);
   const name = s.pool[i];

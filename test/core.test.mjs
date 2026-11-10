@@ -157,9 +157,9 @@ test("empty bucket auto-refills into the next round", () => {
   b = core.drawFrom(b, () => 0).state;
   b = core.drawFrom(b, () => 0).state;
   assert.equal(core.bucketStatus(b).left, 0);
-  const r3 = core.drawFrom(b, () => 0.9);            // last element
-  assert.equal(r3.name, "Ben");
-  assert.equal(r3.state.round, 2);
+  const r3 = core.drawFrom(b, () => 0.9);
+  assert.equal(r3.name, "Ada");                      // Ben closed round 1 —
+  assert.equal(r3.state.round, 2);                   // boundary may not repeat
   assert.ok(r3.state.drawn.includes("— Runde 2 —"));
   assert.equal(core.bucketStatus(r3.state).left, 1);
 });
@@ -236,10 +236,37 @@ test("refill shuffles the new pool and stays a fair permutation", () => {
   let b = core.newBucket(["A", "B", "C"]);
   for (let i = 0; i < 3; i++) b = core.drawFrom(b, () => 0).state;
   assert.equal(core.bucketStatus(b).left, 0);
-  const r = core.drawFrom(b, () => 0.9);   // refill + draw from the new round
+  const r = core.drawFrom(b, () => 0.9);   // refill + boundary-safe first draw
+  assert.equal(r.name, "B");               // C closed round 1 → excluded here
   assert.equal(r.state.round, 2);
   assert.equal(r.state.pool.length, 2);
   assert.ok(r.state.names.includes(r.name));
+  assert.deepEqual(r.state.pool, ["A", "C"]); // B drawn, C back in play
+});
+
+test("boundary rule: a new round never opens with the previous closer", () => {
+  let b = core.newBucket(["A", "B"]);
+  for (let i = 0; i < 200; i++) {
+    const r = core.drawFrom(b);            // crypto path, nondeterministic
+    b = r.state;
+  }
+  assert.equal(b.round >= 100, true);      // 2 names → refill every 2 draws
+  // walk the history: the name right after each round marker must not be
+  // the name that closed the previous round
+  const history = b.drawn;
+  let lastOfRound = null;
+  for (let i = 0; i < history.length; i++) {
+    const entry = history[i];
+    if (entry.startsWith("—")) {
+      const opener = history[i + 1];
+      assert.ok(opener && !opener.startsWith("—"));
+      assert.notEqual(opener, lastOfRound, "boundary repeat leaked");
+      lastOfRound = null;
+    } else {
+      lastOfRound = entry;
+    }
+  }
+  assert.ok(lastOfRound !== null);         // current round is under way
 });
 
 // ---------------------------------------------------------------- purity

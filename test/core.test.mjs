@@ -14,7 +14,8 @@ assert.ok(m, "core block found in index.html");
 const core = new Function(`
   "use strict";
   ${m[1]}
-  return { VERSION, makeTimer, timerState, timerStart, timerPause,
+  return { VERSION, randomInt, shuffled, drawUniform,
+           makeTimer, timerState, timerStart, timerPause,
            timerReset, timerAddMinutes, fmtClock,
            parseNames, newBucket, drawFrom, bucketStatus };
 `)();
@@ -172,6 +173,73 @@ test("original order survives across draws and refills", () => {
   let b = core.newBucket(["A", "B", "C"]);
   for (let i = 0; i < 4; i++) b = core.drawFrom(b, seq(0.1, 0.5)).state;
   assert.deepEqual(b.names, ["A", "B", "C"]);
+});
+
+// ---------------------------------------------------------------- entropy
+
+test("randomInt honors an explicit rng and stays in range", () => {
+  assert.equal(core.randomInt(7, () => 0), 0);
+  assert.equal(core.randomInt(7, () => 0.999), 6);
+  assert.equal(core.randomInt(1, () => 0.5), 0);
+  for (let i = 0; i < 200; i++) {
+    const v = core.randomInt(5, Math.random);
+    assert.ok(v >= 0 && v < 5);
+  }
+});
+
+test("crypto path: randomInt(1) is always 0 and real draws stay in range", () => {
+  // Node has globalThis.crypto since 19 — this exercises the rejection path.
+  assert.equal(core.randomInt(1), 0);
+  for (let i = 0; i < 300; i++) {
+    const v = core.randomInt(6);
+    assert.ok(Number.isInteger(v) && v >= 0 && v < 6);
+  }
+});
+
+test("crypto draws cover the whole range (no stuck index)", () => {
+  const seen = new Set();
+  for (let i = 0; i < 200; i++) seen.add(core.randomInt(4));
+  assert.deepEqual([...seen].sort(), [0, 1, 2, 3]);
+});
+
+test("shuffled keeps the multiset and is deterministic under a seeded rng", () => {
+  const out = core.shuffled(["A", "B", "C", "D"], seq(0.1, 0.2, 0.3, 0.4));
+  assert.deepEqual([...out].sort(), ["A", "B", "C", "D"]);
+  const again = core.shuffled(["A", "B", "C", "D"], seq(0.1, 0.2, 0.3, 0.4));
+  assert.deepEqual(out, again);
+  assert.deepEqual(core.shuffled(["X"], () => 0), ["X"]);
+  assert.deepEqual(core.shuffled([], () => 0), []);
+  assert.deepEqual(core.shuffled(["A", "B"], () => 0), ["B", "A"]); // j=0 swaps i↔0
+});
+
+test("drawUniform is the honest escape hatch: repeats allowed, null on empty", () => {
+  assert.equal(core.drawUniform([], () => 0), null);
+  assert.equal(core.drawUniform(["A"], () => 0), "A");
+  // same rng value → same name: independence means repetition is possible
+  assert.equal(core.drawUniform(["A", "B", "C"], () => 0),
+               core.drawUniform(["A", "B", "C"], () => 0));
+});
+
+test("fair draw uses crypto by default: no-arg drawFrom never throws and drains fairly", () => {
+  let b = core.newBucket(["A", "B", "C", "D"]);
+  const drawn = [];
+  for (let i = 0; i < 4; i++) {
+    const r = core.drawFrom(b);          // no rng → crypto path
+    drawn.push(r.name);
+    b = r.state;
+  }
+  assert.deepEqual([...drawn].sort(), ["A", "B", "C", "D"]); // still a permutation
+});
+
+test("refill shuffles the new pool and stays a fair permutation", () => {
+  // Drain the bucket completely — refill happens only on an empty draw
+  let b = core.newBucket(["A", "B", "C"]);
+  for (let i = 0; i < 3; i++) b = core.drawFrom(b, () => 0).state;
+  assert.equal(core.bucketStatus(b).left, 0);
+  const r = core.drawFrom(b, () => 0.9);   // refill + draw from the new round
+  assert.equal(r.state.round, 2);
+  assert.equal(r.state.pool.length, 2);
+  assert.ok(r.state.names.includes(r.name));
 });
 
 // ---------------------------------------------------------------- purity

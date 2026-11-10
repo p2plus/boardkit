@@ -97,6 +97,11 @@
   #history span.latest { background: var(--accent); color: #171204; border-color: var(--accent); font-weight: 600; }
   .sub { display: flex; gap: 8px; margin-top: 12px; }
   .sub button { flex: 1; padding: 10px; }
+  .toggle {
+    display: flex; gap: 8px; align-items: center; font-size: 13.5px;
+    margin-bottom: 10px; cursor: pointer; color: var(--text);
+  }
+  .toggle input { accent-color: var(--accent); width: 15px; height: 15px; }
   footer { color: var(--muted); font-size: 12.5px; padding: 14px 28px 24px; border-top: 1px solid var(--border); }
   footer a { color: var(--muted); }
 </style>
@@ -150,11 +155,13 @@
       </div>
       <div class="card">
         <h2>Ziehen</h2>
+        <label class="toggle"><input type="checkbox" id="pureRandom">
+          Zufall pur — auch schon gezogene können wiederkommen</label>
         <div id="drawn">…</div>
         <div id="round"></div>
         <button class="act primary" id="drawBtn">Ziehen</button>
         <div id="history"></div>
-        <p class="hint" style="text-align:left">Jede:r kommt dran, bevor eine zweite Runde beginnt. <kbd>Leertaste</kbd> zieht.</p>
+        <p class="hint" style="text-align:left" id="drawHint">Jede:r kommt dran, bevor eine zweite Runde beginnt. <kbd>Leertaste</kbd> zieht.</p>
       </div>
     </div>
   </section>
@@ -168,7 +175,7 @@
 <script>
 /*CORE-START*/
 "use strict";
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 
 // ---- Timer: a small pure state machine -------------------------------
 // Shape: {durationMs, phase: 'idle'|'running'|'paused'|'done',
@@ -224,6 +231,31 @@ function fmtClock(ms) {
 
 // ---- Namen: fair draw bucket ----------------------------------------
 // Shape: {names: [original order], pool: [undrawn], drawn: [history], round}
+
+// Uniform integer in [0, max) — crypto-quality by default, rejection
+// sampled (no modulo bias). An explicit rng (tests) bypasses crypto.
+function randomInt(maxExclusive, rng) {
+  if (!(maxExclusive > 0)) throw new Error("maxExclusive must be > 0");
+  if (rng) return Math.floor(rng() * maxExclusive);
+  const c = globalThis.crypto;
+  if (c && typeof c.getRandomValues === "function") {
+    const limit = Math.floor(0x100000000 / maxExclusive) * maxExclusive;
+    const buf = new Uint32Array(1);
+    do { c.getRandomValues(buf); } while (buf[0] >= limit);
+    return buf[0] % maxExclusive;
+  }
+  return Math.floor(Math.random() * maxExclusive);
+}
+
+function shuffled(arr, rng) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1, rng);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 function parseNames(text) {
   const seen = new Set(), out = [];
   for (const raw of String(text).split(/[\n,;]/)) {
@@ -241,13 +273,14 @@ function newBucket(names) {
   return { names: [...names], pool: [...names], drawn: [], round: 1 };
 }
 
-function drawFrom(state, rng = Math.random) {
+function drawFrom(state, rng) {
   let s = state;
   if (s.pool.length === 0) {
     if (s.names.length === 0) return { name: null, state: s };
-    s = { ...s, pool: [...s.names], round: s.round + 1, drawn: [...s.drawn, "— Runde " + (s.round + 1) + " —"] };
+    s = { ...s, pool: shuffled(s.names, rng), round: s.round + 1,
+          drawn: [...s.drawn, "— Runde " + (s.round + 1) + " —"] };
   }
-  const i = Math.floor(rng() * s.pool.length);
+  const i = randomInt(s.pool.length, rng);
   const name = s.pool[i];
   return {
     name,
@@ -258,6 +291,13 @@ function drawFrom(state, rng = Math.random) {
 
 function bucketStatus(state) {
   return { total: state.names.length, left: state.pool.length, round: state.round };
+}
+
+// Zufall pur: i.i.d. draw over the full list — repeats allowed, nothing
+// predictable, no fairness contract. The escape hatch from the bucket.
+function drawUniform(names, rng) {
+  if (!names.length) return null;
+  return names[randomInt(names.length, rng)];
 }
 /*CORE-END*/
 </script>
@@ -359,26 +399,50 @@ function bucketStatus(state) {
 
   // ---- names ----
   const KEY = "boardkit.names";
+  const PURE_KEY = "boardkit.pure";
   const ta = $("nameList");
   ta.value = localStorage.getItem(KEY) || "";
   let bucket = newBucket(parseNames(ta.value));
+  let pure = localStorage.getItem(PURE_KEY) === "1";
+  let pureHist = [];
+  $("pureRandom").checked = pure;
 
-  function persist() { localStorage.setItem(KEY, ta.value); }
-  function historyHtml() {
-    return bucket.drawn.slice(-18).map((n, i, a) =>
+  function persist() {
+    localStorage.setItem(KEY, ta.value);
+    localStorage.setItem(PURE_KEY, pure ? "1" : "0");
+  }
+  function historyHtml(list) {
+    return list.slice(-18).map((n, i, a) =>
       `<span${i === a.length - 1 && !n.startsWith("—") ? ' class="latest"' : ""}>${n}</span>`).join("");
   }
   function renderNames() {
     const st = bucketStatus(bucket);
+    const names = parseNames(ta.value);
+    $("namesReset").style.display = pure ? "none" : "";
+    $("drawHint").innerHTML = pure
+      ? "Zufall pur: jede Ziehung unabhängig, Wiederholungen möglich. <kbd>Leertaste</kbd> zieht."
+      : "Jede:r kommt dran, bevor eine zweite Runde beginnt. <kbd>Leertaste</kbd> zieht.";
+    $("round").textContent = "";
+    if (pure) {
+      $("nameMeta").textContent = names.length
+        ? `${names.length} Namen · Zufalls-Modus (Wiederholungen möglich)`
+        : "Namen eintippen oder einfügen";
+      $("history").innerHTML = historyHtml(pureHist);
+      $("drawn").textContent = pureHist.length ? pureHist[pureHist.length - 1] : "…";
+      return;
+    }
     $("nameMeta").textContent = bucket.names.length
       ? `${st.total} Namen · ${st.left} im Becher · Runde ${st.round}`
       : "Namen eintippen oder einfügen";
     $("round").textContent = st.round > 1 && bucket.pool.length
       ? `Runde ${st.round} — alle waren schon dran` : "";
-    $("history").innerHTML = historyHtml();
+    $("history").innerHTML = historyHtml(bucket.drawn);
     const last = [...bucket.drawn].reverse().find(n => !n.startsWith("—"));
     $("drawn").textContent = last || "…";
   }
+  $("pureRandom").addEventListener("change", e => {
+    pure = e.target.checked; persist(); renderNames();
+  });
   ta.addEventListener("input", () => {
     bucket = newBucket(parseNames(ta.value));
     persist(); renderNames();
@@ -387,6 +451,13 @@ function bucketStatus(state) {
     bucket = newBucket(parseNames(ta.value)); renderNames();
   });
   function doDraw() {
+    if (pure) {
+      const n = drawUniform(parseNames(ta.value));
+      if (n === null) return;
+      pureHist.push(n);
+      renderNames();
+      return;
+    }
     const res = drawFrom(bucket);
     if (res.name === null) return;
     bucket = res.state; renderNames();

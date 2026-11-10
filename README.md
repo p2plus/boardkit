@@ -21,11 +21,27 @@ beep, red over-time state. `F` toggles fullscreen.
 ## Namen
 
 Paste your class list (one name per line, or comma/semicolon separated —
-deduped automatically). Every draw pulls from the bucket; when it's
-empty, the next draw starts round 2 — **everybody gets a turn before
-anybody gets a second**. History of draws is visible to the class, so
-it's demonstrably fair, and the list persists in `localStorage`.
-`Leertaste` draws. `Alle zurück in den Becher` resets.
+deduped automatically). Two draw modes, because "fair" and
+"unpredictable" pull in opposite directions:
+
+- **Becher-Modus (default)** — every draw pulls from the bucket; when
+  it's empty, the next draw starts round 2. **Everybody gets a turn
+  before anybody gets a second.** Draws use `crypto.getRandomValues`
+  with rejection sampling, and each refill Fisher–Yates-shuffles the
+  pool. History is visible to the class, so it's demonstrably fair.
+- **Zufall pur** — the escape hatch. i.i.d. draws over the full list:
+  repeats happen, nothing is predictable, no contract to audit. Use it
+  when the point is surprise, not fairness.
+
+`Leertaste` draws. `Alle zurück in den Becher` resets (fair mode only —
+in pure mode there is no bucket). The list and the mode persist in
+`localStorage`.
+
+**Honesty about the bucket:** within a fair round, later draws are
+*necessarily* narrowed to whoever hasn't gone yet — the last name of a
+round is fully determined once the pool has one entry. That's not an
+RNG weakness, it's what the fairness promise *means*. When a class
+starts gaming it, that's the signal to flip to Zufall pur.
 
 ## Why one HTML file
 
@@ -49,8 +65,9 @@ leaves the file.
 
 ## Tests
 
-    node --test     # 21 tests — timer state machine, clock format,
-                    # name parsing, fair-bucket draw with seeded RNG
+    node --test     # 28 tests — timer state machine, clock format,
+                    # name parsing, crypto-grade uniform ints, Fisher–Yates,
+                    # fair-bucket draw with seeded RNG, pure-random mode
 
 CI runs them on Node 20/22 across Linux, macOS, Windows.
 

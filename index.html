@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23161b22'/%3E%3Ccircle cx='8' cy='8' r='4' fill='%23ffb454'/%3E%3C/svg%3E">
+<title>boardkit — Timer &amp; Namen für den Unterricht</title>
+<style>
+  :root {
+    --bg: #0e1116; --panel: #161b22; --border: #232a33;
+    --text: #e8eaed; --muted: #8a919e; --accent: #ffb454; --danger: #ff5d5d;
+    --ok: #7ee787;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px; border-bottom: 1px solid var(--border);
+  }
+  h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  h1 span { color: var(--muted); font-weight: 400; font-size: 14px; }
+  header a { color: var(--muted); text-decoration: none; font-size: 13px; }
+  .tabs { display: flex; gap: 8px; }
+  .tab {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 8px; padding: 9px 20px; font: 600 15px/1 system-ui;
+    cursor: pointer;
+  }
+  .tab[aria-selected="true"] { background: var(--accent); color: #171204; border-color: var(--accent); }
+  main { flex: 1; display: flex; flex-direction: column; padding: 24px clamp(16px, 5vw, 60px); }
+  section[hidden] { display: none; }
+
+  /* ---- Timer ---- */
+  #clock {
+    font-size: clamp(72px, 22vw, 300px); font-weight: 700;
+    font-variant-numeric: tabular-nums; text-align: center;
+    letter-spacing: .02em; line-height: 1.1; user-select: none;
+  }
+  #clock.done { color: var(--danger); }
+  #clock.warn { color: var(--accent); }
+  #bar { height: 14px; background: var(--panel); border: 1px solid var(--border);
+         border-radius: 999px; overflow: hidden; margin: 18px auto 8px; width: min(680px, 92%); }
+  #fill { height: 100%; width: 100%; background: var(--ok); transition: width .3s linear; }
+  #fill.warn { background: var(--accent); } #fill.done { background: var(--danger); }
+  #phase { text-align: center; color: var(--muted); font-size: 14px; min-height: 22px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 18px; }
+  button.act {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 26px; font: 600 16px/1 system-ui; cursor: pointer;
+  }
+  button.act:hover { border-color: var(--muted); }
+  button.act.primary { background: var(--accent); color: #171204; border-color: var(--accent); }
+  button.act.stop { background: var(--danger); color: #2a0a0a; border-color: var(--danger); }
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 14px; }
+  .presets button {
+    background: none; border: 1px solid var(--border); color: var(--text);
+    border-radius: 999px; padding: 8px 18px; font: 500 14px/1 system-ui; cursor: pointer;
+  }
+  .presets button:hover, .presets button[aria-pressed="true"] {
+    background: var(--panel); border-color: var(--accent); color: var(--accent);
+  }
+  .custom { display: flex; gap: 8px; justify-content: center; align-items: center; margin-bottom: 6px; color: var(--muted); font-size: 14px; }
+  .custom input {
+    width: 90px; background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+    font: inherit; text-align: right;
+  }
+  .hint { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 16px; }
+  kbd { background: var(--panel); border: 1px solid var(--border); border-radius: 5px; padding: 1px 7px; font-size: 11.5px; }
+
+  /* ---- Namen ---- */
+  .names { display: grid; grid-template-columns: 1fr minmax(260px, 1fr); gap: 18px; align-items: start; }
+  @media (max-width: 820px) { .names { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+  textarea {
+    width: 100%; min-height: 190px; resize: vertical; background: var(--bg);
+    color: var(--text); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; font: inherit;
+  }
+  .meta { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  #drawn {
+    font-size: clamp(40px, 9vw, 88px); font-weight: 700; text-align: center;
+    min-height: 1.2em; margin: 8px 0; user-select: none; word-break: break-word;
+  }
+  #round { text-align: center; color: var(--muted); font-size: 13.5px; min-height: 20px; }
+  #drawBtn { width: 100%; font-size: 20px; padding: 18px; }
+  #history { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  #history span {
+    background: var(--bg); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 999px; padding: 4px 12px; font-size: 13px;
+  }
+  #history span.latest { background: var(--accent); color: #171204; border-color: var(--accent); font-weight: 600; }
+  .sub { display: flex; gap: 8px; margin-top: 12px; }
+  .sub button { flex: 1; padding: 10px; }
+  footer { color: var(--muted); font-size: 12.5px; padding: 14px 28px 24px; border-top: 1px solid var(--border); }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>boardkit <span>· Timer &amp; Namen für den Unterricht</span></h1>
+  <nav class="tabs" role="tablist">
+    <button class="tab" id="tabTimer" role="tab" aria-selected="true">Timer</button>
+    <button class="tab" id="tabNames" role="tab" aria-selected="false">Namen</button>
+  </nav>
+  <a href="https://github.com/p2plus/boardkit" target="_blank" rel="noopener">Quelle &amp; Tests</a>
+</header>
+
+<main>
+  <section id="viewTimer">
+    <div id="clock">5:00</div>
+    <div id="bar"><div id="fill"></div></div>
+    <div id="phase">bereit</div>
+    <div class="presets" id="presets">
+      <button data-min="5" aria-pressed="true">5 min</button>
+      <button data-min="10">10 min</button>
+      <button data-min="15">15 min</button>
+      <button data-min="20">20 min</button>
+      <button data-min="30">30 min</button>
+      <button data-min="45">45 min</button>
+    </div>
+    <div class="custom">
+      <label for="minutes">oder Minuten:</label>
+      <input id="minutes" type="number" min="0.1" step="any" value="5">
+    </div>
+    <div class="controls">
+      <button class="act primary" id="startBtn">Start</button>
+      <button class="act" id="addBtn">+1 min</button>
+      <button class="act stop" id="resetBtn">Reset</button>
+      <button class="act" id="fsBtn">Vollbild</button>
+    </div>
+    <p class="hint"><kbd>F</kbd> Vollbild · Läuft weiter, solange der Tab offen ist</p>
+  </section>
+
+  <section id="viewNames" hidden>
+    <div class="names">
+      <div class="card">
+        <h2>Namen</h2>
+        <textarea id="nameList" spellcheck="false"
+          placeholder="Ein Name pro Zeile — oder Komma getrennt&#10;Ada&#10;Ben&#10;Cem …"></textarea>
+        <div class="meta" id="nameMeta"></div>
+        <div class="sub">
+          <button class="act" id="namesReset">Alle zurück in den Becher</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Ziehen</h2>
+        <div id="drawn">…</div>
+        <div id="round"></div>
+        <button class="act primary" id="drawBtn">Ziehen</button>
+        <div id="history"></div>
+        <p class="hint" style="text-align:left">Jede:r kommt dran, bevor eine zweite Runde beginnt. <kbd>Leertaste</kbd> zieht.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  Läuft offline in diesem Tab — nichts verlässt die Seite. Namen bleiben im
+  Browser gespeichert (localStorage). Beide Werkzeuge, ein Datei.
+</footer>
+
+<script>
+/*CORE-START*/
+"use strict";
+const VERSION = "0.1.0";
+
+// ---- Timer: a small pure state machine -------------------------------
+// Shape: {durationMs, phase: 'idle'|'running'|'paused'|'done',
+//         endAt, pausedLeftMs}
+function makeTimer(durationMs) {
+  if (!(durationMs > 0) || !isFinite(durationMs))
+    throw new Error("duration must be a positive number of milliseconds");
+  return { durationMs, phase: "idle", endAt: null, pausedLeftMs: durationMs };
+}
+
+function timerState(t, nowMs) {
+  if (t.phase === "running") {
+    const remaining = Math.max(0, t.endAt - nowMs);
+    return { remainingMs: remaining, progress: t.durationMs ? remaining / t.durationMs : 0,
+             phase: remaining <= 0 ? "done" : "running" };
+  }
+  const remaining = t.phase === "paused" ? t.pausedLeftMs : t.durationMs;
+  return { remainingMs: remaining, progress: t.durationMs ? remaining / t.durationMs : 0,
+           phase: t.phase === "done" ? "done" : t.phase };
+}
+
+function timerStart(t, nowMs) {
+  if (t.phase === "running") return t;
+  if (t.phase === "done" || t.phase === "idle")
+    return { ...t, phase: "running", endAt: nowMs + t.durationMs, pausedLeftMs: t.durationMs };
+  // paused: resume from what's left
+  return { ...t, phase: "running", endAt: nowMs + t.pausedLeftMs };
+}
+
+function timerPause(t, nowMs) {
+  if (t.phase !== "running") return t;
+  return { ...t, phase: "paused", pausedLeftMs: Math.max(0, t.endAt - nowMs), endAt: null };
+}
+
+function timerReset(t) {
+  return { ...t, phase: "idle", endAt: null, pausedLeftMs: t.durationMs };
+}
+
+function timerAddMinutes(t, minutes, nowMs) {
+  if (!(minutes > 0)) return t;
+  if (t.phase === "running") return { ...t, endAt: t.endAt + minutes * 60000 };
+  if (t.phase === "paused") return { ...t, pausedLeftMs: t.pausedLeftMs + minutes * 60000 };
+  return t;
+}
+
+function fmtClock(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+  const body = `${mm}:${String(sec).padStart(2, "0")}`;
+  return h > 0 ? `${h}:${body}` : body;
+}
+
+// ---- Namen: fair draw bucket ----------------------------------------
+// Shape: {names: [original order], pool: [undrawn], drawn: [history], round}
+function parseNames(text) {
+  const seen = new Set(), out = [];
+  for (const raw of String(text).split(/[\n,;]/)) {
+    const name = raw.trim();
+    if (!name) continue;
+    const key = name.toLocaleLowerCase("de");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
+}
+
+function newBucket(names) {
+  return { names: [...names], pool: [...names], drawn: [], round: 1 };
+}
+
+function drawFrom(state, rng = Math.random) {
+  let s = state;
+  if (s.pool.length === 0) {
+    if (s.names.length === 0) return { name: null, state: s };
+    s = { ...s, pool: [...s.names], round: s.round + 1, drawn: [...s.drawn, "— Runde " + (s.round + 1) + " —"] };
+  }
+  const i = Math.floor(rng() * s.pool.length);
+  const name = s.pool[i];
+  return {
+    name,
+    state: { names: s.names, pool: s.pool.filter((_, k) => k !== i),
+             drawn: [...s.drawn, name], round: s.round },
+  };
+}
+
+function bucketStatus(state) {
+  return { total: state.names.length, left: state.pool.length, round: state.round };
+}
+/*CORE-END*/
+</script>
+
+<script>
+(function () {
+  const $ = id => document.getElementById(id);
+
+  // ---- tabs ----
+  const views = { Timer: $("viewTimer"), Namen: $("viewNames") };
+  const tabs = { Timer: $("tabTimer"), Namen: $("tabNames") };
+  function showTab(name) {
+    for (const [k, el] of Object.entries(views)) el.hidden = k !== name;
+    for (const [k, el] of Object.entries(tabs))
+      el.setAttribute("aria-selected", String(k === name));
+  }
+  tabs.Timer.addEventListener("click", () => showTab("Timer"));
+  tabs.Namen.addEventListener("click", () => showTab("Namen"));
+
+  // ---- timer ----
+  let timer = makeTimer(5 * 60000);
+  let raf = null;
+  const clock = $("clock"), fill = $("fill"), phase = $("phase");
+
+  function beep() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [0, 0.25, 0.5].forEach(off => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.frequency.value = 880; o.type = "sine";
+        g.gain.setValueAtTime(0.001, ctx.currentTime + off);
+        g.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + off + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + off + 0.18);
+        o.connect(g).connect(ctx.destination);
+        o.start(ctx.currentTime + off); o.stop(ctx.currentTime + off + 0.2);
+      });
+    } catch (_) { /* sound is a bonus, never a crash */ }
+  }
+
+  function setMinutes(min) {
+    timer = timerReset(makeTimer(min * 60000));
+    render(performance.now());
+  }
+  for (const b of document.querySelectorAll("#presets button")) {
+    b.addEventListener("click", () => {
+      for (const x of document.querySelectorAll("#presets button"))
+        x.setAttribute("aria-pressed", "false");
+      b.setAttribute("aria-pressed", "true");
+      $("minutes").value = b.dataset.min;
+      setMinutes(Number(b.dataset.min));
+    });
+  }
+  $("minutes").addEventListener("change", () => {
+    const v = Number($("minutes").value);
+    if (v > 0) {
+      for (const x of document.querySelectorAll("#presets button"))
+        x.setAttribute("aria-pressed", String(Number(x.dataset.min) === v));
+      setMinutes(v);
+    }
+  });
+  $("startBtn").addEventListener("click", () => {
+    if (timer.phase === "running") timer = timerPause(timer, performance.now());
+    else {
+      if (timer.phase === "done") beep();
+      timer = timerStart(timer, performance.now());
+    }
+    render(performance.now());
+  });
+  $("resetBtn").addEventListener("click", () => {
+    timer = timerReset(timer); render(performance.now());
+  });
+  $("addBtn").addEventListener("click", () => {
+    timer = timerAddMinutes(timer, 1, performance.now()); render(performance.now());
+  });
+  $("fsBtn").addEventListener("click", () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => {});
+  });
+
+  function render(now) {
+    const s = timerState(timer, now);
+    clock.textContent = fmtClock(s.remainingMs);
+    const done = s.phase === "done", running = s.phase === "running";
+    const warn = !done && s.remainingMs <= 60000;
+    clock.className = done ? "done" : warn ? "warn" : "";
+    fill.className = done ? "done" : warn ? "warn" : "";
+    fill.style.width = (Math.max(0, Math.min(1, s.progress)) * 100) + "%";
+    phase.textContent = done ? "Zeit abgelaufen"
+      : running ? "läuft …" : s.phase === "paused" ? "pausiert" : "bereit";
+    $("startBtn").textContent = running ? "Pause" : "Start";
+    document.title = running || done || s.phase === "paused"
+      ? `${fmtClock(s.remainingMs)} · boardkit` : "boardkit — Timer & Namen für den Unterricht";
+    if (running) {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(render);
+    }
+  }
+  render(performance.now());
+
+  // ---- names ----
+  const KEY = "boardkit.names";
+  const ta = $("nameList");
+  ta.value = localStorage.getItem(KEY) || "";
+  let bucket = newBucket(parseNames(ta.value));
+
+  function persist() { localStorage.setItem(KEY, ta.value); }
+  function historyHtml() {
+    return bucket.drawn.slice(-18).map((n, i, a) =>
+      `<span${i === a.length - 1 && !n.startsWith("—") ? ' class="latest"' : ""}>${n}</span>`).join("");
+  }
+  function renderNames() {
+    const st = bucketStatus(bucket);
+    $("nameMeta").textContent = bucket.names.length
+      ? `${st.total} Namen · ${st.left} im Becher · Runde ${st.round}`
+      : "Namen eintippen oder einfügen";
+    $("round").textContent = st.round > 1 && bucket.pool.length
+      ? `Runde ${st.round} — alle waren schon dran` : "";
+    $("history").innerHTML = historyHtml();
+    const last = [...bucket.drawn].reverse().find(n => !n.startsWith("—"));
+    $("drawn").textContent = last || "…";
+  }
+  ta.addEventListener("input", () => {
+    bucket = newBucket(parseNames(ta.value));
+    persist(); renderNames();
+  });
+  $("namesReset").addEventListener("click", () => {
+    bucket = newBucket(parseNames(ta.value)); renderNames();
+  });
+  function doDraw() {
+    const res = drawFrom(bucket);
+    if (res.name === null) return;
+    bucket = res.state; renderNames();
+  }
+  $("drawBtn").addEventListener("click", doDraw);
+  document.addEventListener("keydown", e => {
+    if (e.key === " " && !e.repeat && !views.Names.hidden
+        && document.activeElement !== ta) {
+      e.preventDefault(); doDraw();
+    }
+    if (e.key === "f" && !e.metaKey && !e.ctrlKey && !e.altKey
+        && document.activeElement !== ta && document.activeElement.tagName !== "INPUT") {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen().catch(() => {});
+    }
+  });
+  renderNames();
+})();
+</script>
+</body>
+</html>

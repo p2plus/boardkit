@@ -12,6 +12,12 @@ school machine, project it on the beamer. No install, no server, no
 account, nothing leaves the page. Hosted copy (for the Wi-Fi days):
 **https://p2plus.github.io/boardkit/**
 
+<p align="center">
+  <img src="docs/timer.png" width="49%" alt="Countdown timer running">
+  <img src="docs/names.png" width="49%" alt="Fair name draw with visible history">
+</p>
+
+
 ## Timer
 
 Big countdown for Klassenarbeit and Stillarbeit. Presets (5–45 min) or

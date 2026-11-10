@@ -2,7 +2,8 @@
 
 [![tests](https://github.com/p2plus/boardkit/actions/workflows/tests.yml/badge.svg)](https://github.com/p2plus/boardkit/actions/workflows/tests.yml)
 
-Zwei Dinge für den Unterricht, richtig gemacht: **ein Timer** und **faires Namen-Ziehen**. Eine Datei.
+Two things for the classroom, done right: a **big countdown timer** and a
+**fair name draw**. One file.
 
 Teachers buy popsicle sticks with names on them and giant visual timers
 — then the school computer can't install anything anyway. boardkit is
